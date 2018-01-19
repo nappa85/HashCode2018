@@ -60,7 +60,6 @@ impl Pizza {
                         if self.is_valid_slice(row1, col1, row2, col2) {
                             self.save_slice(row1, col1, row2, col2);
                         }
-                        
                     }
                 }
             }
@@ -74,7 +73,10 @@ impl Pizza {
             return false;
         }
 
-        let mut ingredients = HashMap::new();
+        let mut ingredients:HashMap<char, usize> = [
+            ('T', 0),
+            ('M', 0),
+        ].iter().cloned().collect();
         for row in row1..row2 + 1 {
             for col in col1..col2 + 1 {
                 match self.matrix[row][col] {
@@ -91,8 +93,8 @@ impl Pizza {
     }
 
     fn save_slice(&mut self, row1: usize, col1: usize, row2: usize, col2: usize) {
-        for row in row1..row2 {
-            for col in col1..col2 {
+        for row in row1..row2 + 1 {
+            for col in col1..col2 + 1 {
                 self.matrix[row][col] = None;
             }
         }
@@ -116,7 +118,7 @@ impl FromStr for Pizza {
             Err(format!("Wrong input {}", d))
         }
         else {
-            Ok(Pizza::new(p[0].parse().unwrap(), p[0].parse().unwrap(), p[0].parse().unwrap(), p[0].parse().unwrap()))
+            Ok(Pizza::new(p[0].parse().unwrap(), p[1].parse().unwrap(), p[2].parse().unwrap(), p[3].parse().unwrap()))
         }
     }
 }
