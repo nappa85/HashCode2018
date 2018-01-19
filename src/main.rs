@@ -1,7 +1,6 @@
 
 use std::env;
-use std::io::BufReader;
-use std::io::BufRead;
+use std::io::{BufReader, BufRead, Write};
 use std::fs::File;
 use std::str::FromStr;
 use std::collections::HashMap;
@@ -150,10 +149,10 @@ impl ToString for Slice {
 
 fn main() {
     let args:Vec<String> = env::args().collect();
-    assert!(args.len() == 2, "Usage: <file.in>");
+    assert!(args.len() == 3, "Usage: <file.in> <file.out>");
 
-    let f = File::open(args.get(1).unwrap()).unwrap();
-    let file = BufReader::new(&f);
+    let fin = File::open(args.get(1).unwrap()).unwrap();
+    let file = BufReader::new(&fin);
     let mut iter = file.lines();
 
     let mut p:Pizza = iter.next().unwrap().unwrap().parse().unwrap();//orribile
@@ -161,5 +160,6 @@ fn main() {
         p.add_row(i, iter.next().unwrap().unwrap());
     }
 
-    println!("{}", p.cut().to_string());
+    let mut fout = File::create(args.get(2).unwrap()).unwrap();
+    fout.write_all(&p.cut().to_string().into_bytes()).unwrap();
 }
