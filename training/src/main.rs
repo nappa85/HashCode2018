@@ -64,6 +64,63 @@ impl Pizza {
             }
         }
 
+        //expand slices where possible
+        for row1 in 0..self.rows {
+            for col1 in 0..self.cols {
+                //if it's an already used slot let's skip it
+                if self.matrix[row1][col1] == None {
+                    continue;
+                }
+
+                'row: for row2 in row1..self.rows {
+                    //slices can't overlap
+                    if self.matrix[row2][col1] == None {
+                        break;
+                    }
+
+                    for col2 in col1..self.cols {
+                        //slices can't overlap
+                        if self.matrix[row2][col2] == None {
+                            break;
+                        }
+
+                        for s in self.slices.iter_mut() {
+                            if s.get_size() + ((row2 - row1) + 1) * ((col2 - col1) + 1) > self.max_cells {
+                                continue;
+                            }
+
+                            //horizontal expansion
+                            if s.row1 == row1 && s.row2 == row2 {
+                                //right expansion
+                                if s.col2 == col1 - 1 {
+                                    s.set_col2(col2);
+                                    break 'row;
+                                }
+                                //left expansion
+                                else if s.col1 == col2 + 1 {
+                                    s.set_col1(col1);
+                                    break 'row;
+                                }
+                            }
+                            //verical expansion
+                            if s.col1 == col1 && s.col2 == col2 {
+                                //bottom expansion
+                                if s.row2 == row1 - 1 {
+                                    s.set_row2(row2);
+                                    break 'row;
+                                }
+                                //top expansion
+                                else if s.row1 == row2 + 1 {
+                                    s.set_row1(row1);
+                                    break 'row;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         self
     }
 
@@ -139,6 +196,28 @@ struct Slice {
     col1: usize,
     row2: usize,
     col2: usize,
+}
+
+impl Slice {
+    fn get_size(&self) -> usize {
+        ((self.row2 - self.row1) + 1) * ((self.col2 - self.col1) + 1)
+    }
+
+    fn set_row1(&mut self, v: usize) {
+        self.row1 = v;
+    }
+
+    fn set_row2(&mut self, v: usize) {
+        self.row2 = v;
+    }
+
+    fn set_col1(&mut self, v: usize) {
+        self.col1 = v;
+    }
+
+    fn set_col2(&mut self, v: usize) {
+        self.col2 = v;
+    }
 }
 
 impl ToString for Slice {

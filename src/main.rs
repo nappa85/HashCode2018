@@ -1,3 +1,4 @@
+extern crate permutohedron;
 
 use std::env;
 use std::io::{BufReader, BufRead, Write};
@@ -5,6 +6,11 @@ use std::fs::File;
 use std::str::FromStr;
 use std::collections::HashMap;
 use std::cmp::PartialEq;
+
+use permutohedron::{
+    Heap,
+    heap_recursive,
+};
 
 pub struct Grid {
     rows: u64,
@@ -41,38 +47,46 @@ impl Grid {
     }
 
     pub fn run(&mut self) {
+        let mut vehicles = Vec::new();
         for v in 0..self.vehicles.len() {
-            for step in 0..self.steps {
-                if self.vehicles[v].is_free() {
-                    //println!("Vehicle {} is free", v);
-                    let mut rides:HashMap<u64, usize> = HashMap::new();
-                    for r in 0..self.rides.len() {
-                        //for this Vehicle this ride isn't feasible
-                        match self.vehicles[v].get_end_time(step, &self.rides[r]) {
-                            Some(t) => {
-                                if t > self.steps {
-                                    //println!("Discarding ride {} because ends at {}", r, t);
+            vehicles.push(v);
+        }
+
+        for step in 0..self.steps {
+            let mut heap = Heap::new(&mut vehicles);
+            while let Some(vehicles) = heap.next_permutation() {
+                for v in vehicles {
+                    if self.vehicles[*v].is_free() {
+                        //println!("Vehicle {} is free", v);
+                        let mut rides:HashMap<u64, usize> = HashMap::new();
+                        for r in 0..self.rides.len() {
+                            //for this Vehicle this ride isn't feasible
+                            match self.vehicles[*v].get_end_time(step, &self.rides[r]) {
+                                Some(t) => {
+                                    if t > self.steps {
+                                        //println!("Discarding ride {} because ends at {}", r, t);
+                                        continue;
+                                    }
+                                    //println!("Ride {} would ends at {}", r, t);
+                                    rides.insert(t, r);
+                                },
+                                None => {
                                     continue;
-                                }
-                                //println!("Ride {} would ends at {}", r, t);
-                                rides.insert(t, r);
+                                },
+                            }
+                        }
+
+                        let mut times:Vec<&u64> = rides.keys().collect();
+                        times.sort();
+                        match times.first() {
+                            Some(i) => {
+                                self.vehicles[*v].pos.t = **i;
+                                self.vehicles[*v].set_ride(self.rides.swap_remove(rides[*i]));
                             },
                             None => {
-                                continue;
+                                //println!("run WTF?");
                             },
                         }
-                    }
-
-                    let mut times:Vec<&u64> = rides.keys().collect();
-                    times.sort();
-                    match times.first() {
-                        Some(i) => {
-                            self.vehicles[v].pos.t = **i;
-                            self.vehicles[v].set_ride(self.rides.swap_remove(rides[*i]));
-                        },
-                        None => {
-                            //println!("run WTF?");
-                        },
                     }
                 }
             }
