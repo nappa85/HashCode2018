@@ -41,8 +41,8 @@ impl Grid {
     }
 
     pub fn run(&mut self) {
-        for step in 0..self.steps {
-            for v in 0..self.vehicles.len() {
+        for v in 0..self.vehicles.len() {
+            for step in 0..self.steps {
                 if self.vehicles[v].is_free() {
                     //println!("Vehicle {} is free", v);
                     let mut rides:HashMap<u64, usize> = HashMap::new();
