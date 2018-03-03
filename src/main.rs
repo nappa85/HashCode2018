@@ -48,7 +48,7 @@ impl Grid {
         let mut distances: HashMap<u64, Vec<u64>> = HashMap::new();
         for v in 0..self.vehicles.len() {
             if self.vehicles[v].pos.t <= wait {
-                let t = self.vehicles[v].pos.t + Intersection::get_distance(&self.vehicles[v].pos, &self.rides[ride as usize].start);
+                let t = self.vehicles[v].get_time_to_start_of(&self.rides[ride as usize]);
                 if distances.contains_key(&t) {
                     distances.get_mut(&t).unwrap().push(v as u64);
                 }
@@ -65,6 +65,7 @@ impl Grid {
                 distances[*i].contains(&vehicle)
             },
             None => {
+                //println!("Vehicle {} skipping ride {} because it would wait too much ({})", vehicle, ride, wait);
                 false
             },
         }
@@ -80,18 +81,14 @@ impl Grid {
                         //for this Vehicle this ride isn't feasible
                         match self.vehicles[v].get_end_time(step, &self.rides[r]) {
                             Some((t, w)) => {
-                                if (t + w) > self.steps {
-                                    //println!("Discarding ride {} because ends at {}", r, t);
+                                if (step + t + w) > self.steps {
+                                    //println!("Discarding ride {} because ends out of time ({} > {})", r, step + t + w, self.steps);
                                     continue;
                                 }
 
                                 if self.should_I_wait(v as u64, w, r as u64) {
                                     //println!("Ride {} would ends at {}", r, t + w);
                                     rides.insert(t, r);
-                                }
-                                else {
-                                    //println!("Vehicle {} skipping ride {} because it would wait too much", v, r);
-                                    continue;
                                 }
                             },
                             None => {
@@ -107,7 +104,7 @@ impl Grid {
                             self.vehicles[v].set_ride(step, self.rides.swap_remove(rides[*i]));
                         },
                         None => {
-                            //println!("run WTF?");
+                            //println!("Vehicle {} hasn't viable rides", v);
                         },
                     }
                 }
@@ -227,18 +224,25 @@ impl Vehicle {
         Intersection::get_distance(&self.pos, &r.end)
     }
 
-    pub fn get_end_time(&self, t: u64, r: &Ride) -> Option<(u64, u64)> {
-        let mut time = t + self.get_start_distance(r);
+    pub fn get_time_to_start_of(&self, r: &Ride) -> u64 {
+        match self.cur_ride {
+            Some(ref ride) => self.pos.t + Intersection::get_distance(&ride.end, &r.start),
+            None => Intersection::get_distance(&self.pos, &r.start),
+        }
+    }
+
+    pub fn get_end_time(&self, step: u64, r: &Ride) -> Option<(u64, u64)> {
+        let mut time = self.get_start_distance(r);
         let mut wait = 0u64;
 
-        if time < r.start.t {
-            wait = r.start.t - time;
+        if (step + time) < r.start.t {
+            wait = r.start.t - (step + time);
         }
 
         time += Intersection::get_distance(&r.start, &r.end);
 
-        if (time + wait) > r.end.t {
-            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, time, r.end.t);
+        if (step + time + wait) > r.end.t {
+            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, step + time + wait, r.end.t);
             None
         }
         else {
@@ -248,8 +252,8 @@ impl Vehicle {
 
     pub fn is_free(&mut self) -> bool {
         if self.cur_ride.is_some() {
-            //println!("Vehicle {} moved", self.index);
             self.pos.t -= 1;
+            //println!("Vehicle {} moved, {} moves to end", self.index, self.pos.t);
             if self.pos.t == 0 {
                 match self.cur_ride {
                     Some(ref r) => {
@@ -257,7 +261,7 @@ impl Vehicle {
                         self.pos.y = r.end.y;
                     },
                     None => {
-                        //println!("is_free WTF?");
+                        assert!(false, "How is it even possible?");
                     },
                 }
                 self.cur_ride = None;
