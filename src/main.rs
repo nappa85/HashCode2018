@@ -5,6 +5,7 @@ use std::fs::File;
 use std::str::FromStr;
 use std::collections::HashMap;
 use std::cmp::PartialEq;
+use std::cmp::Ordering;
 
 pub struct Grid {
     rows: u64,
@@ -48,13 +49,13 @@ impl Grid {
                 }
 
                 //println!("Vehicle {} is free", v);
-                let mut rides:HashMap<u64, usize> = HashMap::new();
+                let mut rides:HashMap<(u64, u64), usize> = HashMap::new();
                 for r in 0..self.rides.len() {
                     //for this Vehicle this ride isn't feasible
                     match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
-                        Some(p) => {
+                        Some((p, t)) => {
                             //println!("Ride {} would ends at {}", r, t);
-                            rides.insert(p, r);
+                            rides.insert((p, t), r);
                         },
                         None => {
                             continue;
@@ -62,11 +63,22 @@ impl Grid {
                     }
                 }
 
-                let mut times:Vec<&u64> = rides.keys().collect();
-                times.sort_unstable();
-                match times.first() {
-                    Some(i) => {
-                        self.vehicles[v].set_ride(self.rides.swap_remove(rides[*i]));
+                let mut ranks:Vec<&(u64, u64)> = rides.keys().collect();
+                ranks.sort_unstable_by(|&&(p1, t1), &&(p2, t2)| {
+                    match t1.cmp(&t2) {
+                        Ordering::Equal => match p1.cmp(&p2) {
+                            Ordering::Equal => Ordering::Equal,
+                            //reverse sort
+                            Ordering::Less => Ordering::Greater,
+                            Ordering::Greater => Ordering::Less,
+                        },
+                        Ordering::Less => Ordering::Less,
+                        Ordering::Greater => Ordering::Greater,
+                    }
+                });
+                match ranks.first() {
+                    Some(&&(p, t)) => {
+                        self.vehicles[v].set_ride(self.rides.swap_remove(rides[&(p, t)]));
                     },
                     None => {
                         //println!("Vehicle {} hasn't viable rides", v);
@@ -188,7 +200,7 @@ impl Vehicle {
         Intersection::get_distance(&self.pos, &r.end)
     }
 
-    pub fn get_points(&self, step: u64, max_step: u64, bonus: u64, r: &Ride) -> Option<u64> {
+    pub fn get_points(&self, step: u64, max_step: u64, bonus: u64, r: &Ride) -> Option<(u64, u64)> {
         let mut time = self.get_start_distance(r);
         let mut points = 0;
 
@@ -210,7 +222,7 @@ impl Vehicle {
             None
         }
         else {
-            Some(time)
+            Some((points, time))
         }
     }
 
