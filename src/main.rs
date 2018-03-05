@@ -48,14 +48,10 @@ impl Grid {
                     let mut rides:HashMap<u64, usize> = HashMap::new();
                     for r in 0..self.rides.len() {
                         //for this Vehicle this ride isn't feasible
-                        match self.vehicles[v].get_end_time(step, &self.rides[r]) {
-                            Some(t) => {
-                                if t > self.steps {
-                                    //println!("Discarding ride {} because ends at {}", r, t);
-                                    continue;
-                                }
+                        match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
+                            Some(p) => {
                                 //println!("Ride {} would ends at {}", r, t);
-                                rides.insert(t, r);
+                                rides.insert(p, r);
                             },
                             None => {
                                 continue;
@@ -65,9 +61,8 @@ impl Grid {
 
                     let mut times:Vec<&u64> = rides.keys().collect();
                     times.sort();
-                    match times.first() {
+                    match times.last() {
                         Some(i) => {
-                            self.vehicles[v].pos.t = **i;
                             self.vehicles[v].set_ride(self.rides.swap_remove(rides[*i]));
                         },
                         None => {
@@ -191,21 +186,29 @@ impl Vehicle {
         Intersection::get_distance(&self.pos, &r.end)
     }
 
-    pub fn get_end_time(&self, t: u64, r: &Ride) -> Option<u64> {
-        let mut time = t + self.get_start_distance(r);
+    pub fn get_points(&self, step: u64, max_step: u64, bonus: u64, r: &Ride) -> Option<u64> {
+        let mut time = self.get_start_distance(r);
+        let mut points = 0;
 
-        if time < r.start.t {
-            time += r.start.t - time;
+        if step + time <= r.start.t {
+            time += r.start.t - (step + time);
+            points += bonus;
         }
 
-        time += Intersection::get_distance(&r.start, &r.end);
+        let distance = Intersection::get_distance(&r.start, &r.end);
+        time += distance;
+        points += distance;
 
-        if time > r.end.t {
+        if step + time > r.end.t {
             //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, time, r.end.t);
             None
         }
+        else if step + time > max_step {
+            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, time, max_step);
+            None
+        }
         else {
-            Some(time)
+            Some(points)
         }
     }
 
@@ -237,6 +240,7 @@ impl Vehicle {
 
     pub fn set_ride(&mut self, r: Ride) {
         //println!("Vehicle {} taking ride {}", self.index, r.index);
+        self.pos.t = self.get_start_distance(&r) + Intersection::get_distance(&r.start, &r.end);
         self.runs.push(r.index);
         self.cur_ride = Some(r);
     }
