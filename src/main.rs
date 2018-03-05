@@ -45,7 +45,8 @@ impl Grid {
             for v in 0..self.vehicles.len() {
                 if self.vehicles[v].is_free() {
                     //println!("Vehicle {} is free", v);
-                    let mut rides:HashMap<u64, usize> = HashMap::new();
+                    let mut points:HashMap<u64, Vec<usize>> = HashMap::new();
+                    let mut times:HashMap<usize, u64> = HashMap::new();
                     for r in 0..self.rides.len() {
                         //for this Vehicle this ride isn't feasible
                         match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
@@ -59,6 +60,7 @@ impl Grid {
                         }
                     }
 
+
                     let mut times:Vec<&u64> = rides.keys().collect();
                     times.sort();
                     match times.last() {
@@ -66,7 +68,7 @@ impl Grid {
                             self.vehicles[v].set_ride(self.rides.swap_remove(rides[*i]));
                         },
                         None => {
-                            //println!("run WTF?");
+                            //println!("Vehicle {} hasn't viable rides", v);
                         },
                     }
                 }
@@ -214,8 +216,8 @@ impl Vehicle {
 
     pub fn is_free(&mut self) -> bool {
         if self.cur_ride.is_some() {
-            //println!("Vehicle {} moved", self.index);
             self.pos.t -= 1;
+            //println!("Vehicle {} moved, {} moves to end", self.index, self.pos.t);
             if self.pos.t == 0 {
                 match self.cur_ride {
                     Some(ref r) => {
@@ -223,7 +225,7 @@ impl Vehicle {
                         self.pos.y = r.end.y;
                     },
                     None => {
-                        //println!("is_free WTF?");
+                        assert!(false, "How is it even possible?");
                     },
                 }
                 self.cur_ride = None;
