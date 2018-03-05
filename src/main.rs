@@ -43,34 +43,34 @@ impl Grid {
     pub fn run(&mut self) {
         for step in 0..self.steps {
             for v in 0..self.vehicles.len() {
-                if self.vehicles[v].is_free() {
-                    //println!("Vehicle {} is free", v);
-                    let mut points:HashMap<u64, Vec<usize>> = HashMap::new();
-                    let mut times:HashMap<usize, u64> = HashMap::new();
-                    for r in 0..self.rides.len() {
-                        //for this Vehicle this ride isn't feasible
-                        match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
-                            Some(p) => {
-                                //println!("Ride {} would ends at {}", r, t);
-                                rides.insert(p, r);
-                            },
-                            None => {
-                                continue;
-                            },
-                        }
-                    }
+                if !self.vehicles[v].is_free() {
+                    continue;
+                }
 
-
-                    let mut times:Vec<&u64> = rides.keys().collect();
-                    times.sort();
-                    match times.last() {
-                        Some(i) => {
-                            self.vehicles[v].set_ride(self.rides.swap_remove(rides[*i]));
+                //println!("Vehicle {} is free", v);
+                let mut rides:HashMap<u64, usize> = HashMap::new();
+                for r in 0..self.rides.len() {
+                    //for this Vehicle this ride isn't feasible
+                    match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
+                        Some(p) => {
+                            //println!("Ride {} would ends at {}", r, t);
+                            rides.insert(p, r);
                         },
                         None => {
-                            //println!("Vehicle {} hasn't viable rides", v);
+                            continue;
                         },
                     }
+                }
+
+                let mut times:Vec<&u64> = rides.keys().collect();
+                times.sort_unstable();
+                match times.first() {
+                    Some(i) => {
+                        self.vehicles[v].set_ride(self.rides.swap_remove(rides[*i]));
+                    },
+                    None => {
+                        //println!("Vehicle {} hasn't viable rides", v);
+                    },
                 }
             }
         }
@@ -210,7 +210,7 @@ impl Vehicle {
             None
         }
         else {
-            Some(points)
+            Some(time)
         }
     }
 
