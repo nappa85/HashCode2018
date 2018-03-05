@@ -40,47 +40,6 @@ impl Grid {
         self.rides.push(Ride::new(r as u64, p[0].parse().unwrap(), p[1].parse().unwrap(), p[2].parse().unwrap(), p[3].parse().unwrap(), p[4].parse().unwrap(), p[5].parse().unwrap()));
     }
 
-//     pub fn should_I_wait(&self, vehicle: u64, wait: u64, ride: u64) -> bool {
-//         if wait == 0 {
-//             return true;
-//         }
-// 
-//         //catalog the actual vehicles distance from ride's start, if they ends in time
-//         let mut distances: HashMap<u64, Vec<u64>> = HashMap::new();
-//         for v in 0..self.vehicles.len() {
-//             if self.vehicles[v].pos.t <= wait {
-//                 let t = self.vehicles[v].get_time_to_start_of(&self.rides[ride as usize]);
-//                 if distances.contains_key(&t) {
-//                     distances.get_mut(&t).unwrap().push(v as u64);
-//                 }
-//                 else {
-//                     distances.insert(t, vec![v as u64]);
-//                 }
-//             }
-//         }
-// 
-//         let mut d:Vec<&u64> = distances.keys().collect();
-//         d.sort();
-//         match d.first() {
-//             Some(i) => {
-//                 //between the nearest vehicles, am I the best one?
-//                 if distances[*i].contains(&vehicle) {
-//                     //we have to check between actual 
-//                     let mut distances: HashMap<u64, Vec<u64>> = HashMap::new();
-//                     for v in distances[*i] {
-//                     }
-//                 }
-//                 else {
-//                     false
-//                 }
-//             },
-//             None => {
-//                 //println!("Vehicle {} skipping ride {} because it would wait too much ({})", vehicle, ride, wait);
-//                 false
-//             },
-//         }
-//     }
-
     pub fn run(&mut self) {
         for step in 0..self.steps {
             for v in 0..self.vehicles.len() {
@@ -90,22 +49,10 @@ impl Grid {
                     let mut times:HashMap<usize, u64> = HashMap::new();
                     for r in 0..self.rides.len() {
                         //for this Vehicle this ride isn't feasible
-                        match self.vehicles[v].get_time_to_end(step, &self.rides[r]) {
-                            Some(t) => {
-                                if (step + t) > self.steps {
-                                    //println!("Discarding ride {} because ends out of time ({} > {})", r, step + t + w, self.steps);
-                                    continue;
-                                }
-
-                                let p = self.vehicles[v].get_points(step, self.bonus, &self.rides[r]);
-                                //println!("Ride {} would ends at {} giving {} points", r, t, p);
-                                if points.contains_key(&p) {
-                                    points.get_mut(&p).unwrap().push(r);
-                                }
-                                else {
-                                    points.insert(p, vec![r]);
-                                }
-                                times.insert(r, t);
+                        match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
+                            Some(p) => {
+                                //println!("Ride {} would ends at {}", r, t);
+                                rides.insert(p, r);
                             },
                             None => {
                                 continue;
@@ -113,28 +60,12 @@ impl Grid {
                         }
                     }
 
-                    let mut temp:Vec<&u64> = points.keys().collect();
-                    temp.sort();
-                    match temp.last() {
-                        Some(i) => {
-                            let rides = &points[*i];
-                            //println!("Choosing between {} equivalent rides giving {} point", rides.len(), *i);
-                            let mut rides_times: HashMap<u64, usize> = HashMap::new();
-                            for r in rides {
-                                rides_times.insert(times[&r], *r);
-                            }
 
-                            let mut temp:Vec<&u64> = rides_times.keys().collect();
-                            temp.sort();
-                            match temp.first() {
-                                Some(i) => {
-                                    //println!("Choosed ride {} because lasts {} steps", rides_times[*i], *i);
-                                    self.vehicles[v].set_ride(step, self.rides.swap_remove(rides_times[*i]));
-                                },
-                                None => {
-                                    //println!("WTF?");
-                                },
-                            }
+                    let mut times:Vec<&u64> = rides.keys().collect();
+                    times.sort();
+                    match times.last() {
+                        Some(i) => {
+                            self.vehicles[v].set_ride(self.rides.swap_remove(rides[*i]));
                         },
                         None => {
                             //println!("Vehicle {} hasn't viable rides", v);
@@ -257,38 +188,29 @@ impl Vehicle {
         Intersection::get_distance(&self.pos, &r.end)
     }
 
-    pub fn get_time_to_start_of(&self, r: &Ride) -> u64 {
-        match self.cur_ride {
-            Some(ref ride) => self.pos.t + Intersection::get_distance(&ride.end, &r.start),
-            None => Intersection::get_distance(&self.pos, &r.start),
-        }
-    }
+    pub fn get_points(&self, step: u64, max_step: u64, bonus: u64, r: &Ride) -> Option<u64> {
+        let mut time = self.get_start_distance(r);
+        let mut points = 0;
 
-    pub fn get_points(&self, step: u64, bonus: u64, r: &Ride) -> u64 {
-        let mut points = Intersection::get_distance(&r.start, &r.end);
-
-        if step <= r.start.t {
+        if step + time <= r.start.t {
+            time += r.start.t - (step + time);
             points += bonus;
         }
 
-        points
-    }
+        let distance = Intersection::get_distance(&r.start, &r.end);
+        time += distance;
+        points += distance;
 
-    pub fn get_time_to_end(&self, step: u64, r: &Ride) -> Option<u64> {
-        let mut time = self.get_start_distance(r);
-
-        if (step + time) < r.start.t {
-            time += r.start.t - (step + time);
+        if step + time > r.end.t {
+            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, time, r.end.t);
+            None
         }
-
-        time += Intersection::get_distance(&r.start, &r.end);
-
-        if (step + time) > r.end.t {
-            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, step + time, r.end.t);
+        else if step + time > max_step {
+            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, time, max_step);
             None
         }
         else {
-            Some(time)
+            Some(points)
         }
     }
 
@@ -318,11 +240,11 @@ impl Vehicle {
         }
     }
 
-    pub fn set_ride(&mut self, step: u64, ride: Ride) {
-        //println!("Vehicle {} taking ride {}", self.index, ride.index);
-        self.pos.t = self.get_time_to_end(step, &ride).unwrap();
-        self.runs.push(ride.index);
-        self.cur_ride = Some(ride);
+    pub fn set_ride(&mut self, r: Ride) {
+        //println!("Vehicle {} taking ride {}", self.index, r.index);
+        self.pos.t = self.get_start_distance(&r) + Intersection::get_distance(&r.start, &r.end);
+        self.runs.push(r.index);
+        self.cur_ride = Some(r);
     }
 }
 
