@@ -4,7 +4,7 @@ use std::io::{BufReader, BufRead, Write};
 use std::fs::File;
 use std::str::FromStr;
 use std::collections::HashMap;
-use std::cmp::PartialEq;
+use std::cmp::{PartialEq, Ordering};
 
 pub struct Grid {
     rows: u64,
@@ -45,13 +45,18 @@ impl Grid {
             for v in 0..self.vehicles.len() {
                 if self.vehicles[v].is_free() {
                     //println!("Vehicle {} is free", v);
-                    let mut rides:HashMap<u64, usize> = HashMap::new();
+                    let mut rides:HashMap<(u64, u64), Vec<usize>> = HashMap::new();
                     for r in 0..self.rides.len() {
                         //for this Vehicle this ride isn't feasible
                         match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
-                            Some(p) => {
+                            Some((p, t)) => {
                                 //println!("Ride {} would ends at {}", r, t);
-                                rides.insert(p, r);
+                                if rides.contains_key(&(p, t)) {
+                                    rides.get_mut(&(p, t)).unwrap().push(r);
+                                }
+                                else {
+                                    rides.insert((p, t), vec![r]);
+                                }
                             },
                             None => {
                                 continue;
@@ -59,11 +64,19 @@ impl Grid {
                         }
                     }
 
-                    let mut times:Vec<&u64> = rides.keys().collect();
-                    times.sort();
+                    let mut times:Vec<&(u64, u64)> = rides.keys().collect();
+                    times.sort_by(|&&(p1, t1), &&(p2, t2)| match p1.cmp(&p2) {
+                        Ordering::Equal => t1.cmp(&t2),
+                        Ordering::Less => Ordering::Greater,
+                        Ordering::Greater => Ordering::Less,
+                    });
                     match times.first() {
-                        Some(i) => {
-                            self.vehicles[v].set_ride(**i, self.rides.swap_remove(rides[*i]));
+                        Some(&&(p, t)) => {
+                            let rs = &rides[&(p, t)];
+                            if rs.len() > 1 {
+                                println!("Rides who ends in {} steps with {} points: {:?}", t, p, rs);
+                            }
+                            self.vehicles[v].set_ride(t, self.rides.swap_remove(*rs.last().unwrap()));
                         },
                         None => {
                             //println!("run WTF?");
@@ -186,7 +199,7 @@ impl Vehicle {
         Intersection::get_distance(&self.pos, &r.end)
     }
 
-    pub fn get_points(&self, step: u64, max_step: u64, bonus: u64, r: &Ride) -> Option<u64> {
+    pub fn get_points(&self, step: u64, max_step: u64, bonus: u64, r: &Ride) -> Option<(u64, u64)> {
         let mut time = self.get_start_distance(r);
         let mut points = 0;
 
@@ -208,7 +221,7 @@ impl Vehicle {
             None
         }
         else {
-            Some(time)
+            Some((points, time))
         }
     }
 
