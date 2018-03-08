@@ -1,10 +1,14 @@
+extern crate petgraph;
 
 use std::env;
 use std::io::{BufReader, BufRead, Write};
 use std::fs::File;
 use std::str::FromStr;
 use std::collections::HashMap;
-use std::cmp::{PartialEq, Ordering};
+use std::cmp::Ordering;
+
+use petgraph::graph::DiGraph;
+use petgraph::algo::astar;
 
 pub struct Grid {
     rows: u64,
@@ -40,51 +44,36 @@ impl Grid {
         self.rides.push(Ride::new(r as u64, p[0].parse().unwrap(), p[1].parse().unwrap(), p[2].parse().unwrap(), p[3].parse().unwrap(), p[4].parse().unwrap(), p[5].parse().unwrap()));
     }
 
-    pub fn run(&mut self) {
-        for step in 0..self.steps {
-            for v in 0..self.vehicles.len() {
-                if self.vehicles[v].is_free() {
-                    //println!("Vehicle {} is free", v);
-                    let mut rides:HashMap<(u64, u64), Vec<usize>> = HashMap::new();
-                    for r in 0..self.rides.len() {
-                        //for this Vehicle this ride isn't feasible
-                        match self.vehicles[v].get_points(step, self.steps, self.bonus, &self.rides[r]) {
-                            Some((p, t)) => {
-                                //println!("Ride {} would ends at {}", r, t);
-                                if rides.contains_key(&(p, t)) {
-                                    rides.get_mut(&(p, t)).unwrap().push(r);
-                                }
-                                else {
-                                    rides.insert((p, t), vec![r]);
-                                }
-                            },
-                            None => {
-                                continue;
-                            },
-                        }
-                    }
+    fn run(&self) {
+        let mut g = DiGraph::new();
 
-                    let mut times:Vec<&(u64, u64)> = rides.keys().collect();
-                    times.sort_by(|&&(p1, t1), &&(p2, t2)| match p1.cmp(&p2) {
-                        Ordering::Equal => t1.cmp(&t2),
-                        Ordering::Less => Ordering::Greater,
-                        Ordering::Greater => Ordering::Less,
-                    });
-                    match times.first() {
-                        Some(&&(p, t)) => {
-                            let rs = &rides[&(p, t)];
-                            if rs.len() > 1 {
-                                println!("Rides who ends in {} steps with {} points: {:?}", t, p, rs);
-                            }
-                            self.vehicles[v].set_ride(t, self.rides.swap_remove(*rs.last().unwrap()));
-                        },
-                        None => {
-                            //println!("run WTF?");
-                        },
-                    }
+        let mut nodes = Vec::new();
+        for r in 0..self.rides.len() {
+            nodes.push(g.add_node(r));
+        }
+        //let's add a virtual node
+        let root = nodes.push(g.add_node(self.rides.len()));
+
+        for r in 0..self.rides.len() {
+            match self.rides[r].get_root_weight(self.steps) {
+                Some((t_min, t_max, p)) => { g.extend_with_edges(&[(root, nodes[r], (t_min, t_max, p))]); }
+                None => {},
+            }
+
+            for rr in 0..self.rides.len() {
+                if r == rr {
+                    continue;
+                }
+
+                match self.rides[r].get_weight(&self.rides[rr], self.steps) {
+                    Some((t_min, t_max, p)) => { g.extend_with_edges(&[(nodes[r], nodes[rr], (t_min, t_max, p))]); }
+                    None => {},
                 }
             }
         }
+
+        let test = astar(g, root, |node| self.is_goal(node), |edge| self.get_edge_cost(edge), |node| self.estimate_cost(node));
+        println!("{:?", test);
     }
 }
 
@@ -115,7 +104,7 @@ impl ToString for Grid {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct Ride {
     index: u64,
     start: Intersection,
@@ -130,6 +119,54 @@ impl Ride {
             end: Intersection::new(x, y, f),
         }
     }
+
+    pub fn get_weight(&self, r: &Ride, max_steps: u64) -> Option<(u64, u64, u64)> {
+        let step = self.start.t + Intersection::get_distance(&self.start, &self.end);//meanwhile
+        let mut time = Intersection::get_distance(&self.end, &r.start);
+        let mut points = 0;
+
+        if step + time < r.start.t {
+            time += r.start.t - (step + time);
+        }
+
+        let distance = Intersection::get_distance(&r.start, &r.end);
+        time += distance;
+        points += distance;
+
+        if step + time > r.end.t {
+            None
+        }
+        else if step + time > max_steps {
+            None
+        }
+        else {
+            Some((r.start.t, r.end.t - distance, points))
+        }
+    }
+
+    pub fn get_root_weight(&self, max_steps: u64) -> Option<(u64, u64, u64)> {
+        let step = 0;
+        let mut time = Intersection::get_distance(&Intersection::new(0, 0, 0), &self.start);
+        let mut points = 0;
+
+        if step + time < self.start.t {
+            time += self.start.t - (step + time);
+        }
+
+        let distance = Intersection::get_distance(&self.start, &self.end);
+        time += distance;
+        points += distance;
+
+        if step + time > self.end.t {
+            None
+        }
+        else if step + time > max_steps {
+            None
+        }
+        else {
+            Some((self.start.t, self.end.t - distance, points))
+        }
+    }
 }
 
 impl ToString for Ride {
@@ -138,7 +175,7 @@ impl ToString for Ride {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct Intersection {
     x: u64,
     y: u64,
@@ -180,82 +217,6 @@ impl Vehicle {
             pos: Intersection::new(0, 0, 0),
             cur_ride: None,
         }
-    }
-
-    pub fn get_remaining_time(&self) -> u64 {
-        match self.cur_ride {
-            Some(ref ride) => {
-                Intersection::get_distance(&self.pos, &ride.end)
-            },
-            None => 0,
-        }
-    }
-
-    pub fn get_start_distance(&self, r: &Ride) -> u64 {
-        Intersection::get_distance(&self.pos, &r.start)
-    }
-
-    pub fn get_end_distance(&self, r: &Ride) -> u64 {
-        Intersection::get_distance(&self.pos, &r.end)
-    }
-
-    pub fn get_points(&self, step: u64, max_step: u64, bonus: u64, r: &Ride) -> Option<(u64, u64)> {
-        let mut time = self.get_start_distance(r);
-        let mut points = 0;
-
-        if step + time <= r.start.t {
-            time += r.start.t - (step + time);
-            points += bonus;
-        }
-
-        let distance = Intersection::get_distance(&r.start, &r.end);
-        time += distance;
-        points += distance;
-
-        if step + time > r.end.t {
-            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, time, r.end.t);
-            None
-        }
-        else if step + time > max_step {
-            //println!("Discarding ride {} because cannot end in time ({} > {})", r.index, time, max_step);
-            None
-        }
-        else {
-            Some((points, time))
-        }
-    }
-
-    pub fn is_free(&mut self) -> bool {
-        if self.cur_ride.is_some() {
-            //println!("Vehicle {} moved", self.index);
-            self.pos.t -= 1;
-            if self.pos.t == 0 {
-                match self.cur_ride {
-                    Some(ref r) => {
-                        self.pos.x = r.end.x;
-                        self.pos.y = r.end.y;
-                    },
-                    None => {
-                        //println!("is_free WTF?");
-                    },
-                }
-                self.cur_ride = None;
-                true
-            }
-            else {
-                false
-            }
-        }
-        else {
-            true
-        }
-    }
-
-    pub fn set_ride(&mut self, t: u64, r: Ride) {
-        //println!("Vehicle {} taking ride {}", self.index, r.index);
-        self.pos.t = t;
-        self.runs.push(r.index);
-        self.cur_ride = Some(r);
     }
 }
 
